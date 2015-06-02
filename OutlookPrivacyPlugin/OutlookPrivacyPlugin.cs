@@ -405,7 +405,6 @@ namespace OutlookPrivacyPlugin
 					if (mailItem.BodyFormat != Outlook.OlBodyFormat.olFormatPlain)
 					{
 						StringBuilder body = new StringBuilder(mailItem.Body);
-						//mailItem.BodyFormat = Outlook.OlBodyFormat.olFormatPlain;
 
 						Stack<int> indexes = new Stack<int>();
 						for (int cnt = 0; cnt < body.Length; cnt++)
@@ -528,6 +527,12 @@ namespace OutlookPrivacyPlugin
 					ribbon.VerifyButton.Enabled = (match.Value == _pgpSignedHeader);
 					ribbon.DecryptButton.Enabled = (match.Value == _pgpEncryptedHeader);
 				}
+
+				if(ribbon.VerifyButton.Enabled || ribbon.DecryptButton.Enabled)
+				{
+					if (_settings.SaveDecrypted)
+						mailItem.Save();
+				}
 			}
 
 			ribbon.InvalidateButtons();
@@ -539,11 +544,6 @@ namespace OutlookPrivacyPlugin
             var schema = "http://schemas.microsoft.com/mapi/string/{27EE45DA-1B2C-4E5B-B437-93E9820CC1FA}/" + name;
 			
             mailItem.PropertyAccessor.SetProperty(schema, value);
-
-            //if(!_conversationState.ContainsKey(mailItem.ConversationID))
-            //    _conversationState[mailItem.ConversationIndex] = new Dictionary<string, object>();
-
-            //_conversationState[mailItem.ConversationIndex][name] = value;
 		}
 
 		public static object GetProperty(Outlook.MailItem mailItem, string name, object defaultReturn = null)
@@ -554,9 +554,6 @@ namespace OutlookPrivacyPlugin
 				var schema = "http://schemas.microsoft.com/mapi/string/{27EE45DA-1B2C-4E5B-B437-93E9820CC1FA}/" + name;
 
 				return mailItem.PropertyAccessor.GetProperty(schema);
-				//return null;
-
-				//return _conversationState[mailItem.ConversationIndex][name];
 			}
 			catch(Exception)
 			{
@@ -1045,15 +1042,16 @@ namespace OutlookPrivacyPlugin
 
                         var timer = new System.Windows.Forms.Timer { Interval = 250 };
                         timer.Tick += new EventHandler((o, e) =>
-					{
+						{
                             timer.Stop();
                             ((Outlook._MailItem)mailItem).Close(
+								_settings.SaveDecrypted ? Microsoft.Office.Interop.Outlook.OlInspectorClose.olSave :
                                 Microsoft.Office.Interop.Outlook.OlInspectorClose.olDiscard);
                         });
 
 					    timer.Start();
 
-					    Cancel = true;
+						Cancel = true;
 					}
 				}
 			}
@@ -1253,7 +1251,7 @@ namespace OutlookPrivacyPlugin
 					// Popup UI to select the encryption targets 
 					List<string> mailRecipients = new List<string>();
 					foreach (Outlook.Recipient mailRecipient in mailItem.Recipients)
-						mailRecipients.Add(GetAddressCN(((Outlook.Recipient)mailRecipient).Address));
+						mailRecipients.Add(GetSmtpAddressForRecipient((Outlook.Recipient)mailRecipient));
 
 					var recipientDialog = new FormKeySelection(
 						mailRecipients,
@@ -1778,29 +1776,6 @@ namespace OutlookPrivacyPlugin
 							// Assume attachment wasn't encrypted
 						}
 					}
-					//else if (attachment.FileName == "PGPexch.htm.pgp")
-					//{
-					//	// This is the HTML email message.
-
-					//	var TempFile = Path.GetTempFileName();
-					//	attachment.SaveAsFile(TempFile);
-
-					//	// Decrypt file
-					//	var cyphertext = File.ReadAllBytes(TempFile);
-					//	File.Delete(TempFile);
-
-					//	try
-					//	{
-					//		var plaintext = DecryptAndVerify(mailItem.To, cyphertext);
-
-					//		mailItem.BodyFormat = Outlook.OlBodyFormat.olFormatHTML;
-					//		mailItem.HTMLBody = _encoding.GetString(plaintext);
-					//	}
-					//	catch
-					//	{
-					//		// Odd!
-					//	}
-					//}
 					else
 					{
 						a.FileName = Regex.Replace(attachment.FileName, @"\.(pgp\.asc|gpg\.asc|pgp|gpg|asc)$", "");
@@ -1834,9 +1809,6 @@ namespace OutlookPrivacyPlugin
 
 				foreach (var attachment in attachments)
 					mailItem.Attachments.Add(attachment.TempFile, attachment.AttachmentType, 1, attachment.FileName);
-
-				// Warning: Saving could save the message back to the server, not just locally
-				//mailItem.Save();
 			}
 		}
 
@@ -1970,6 +1942,7 @@ namespace OutlookPrivacyPlugin
 			_settings.IgnoreIntegrityCheck = settingsBox.IgnoreIntegrityCheck;
 			_settings.Cipher = settingsBox.Cipher;
 			_settings.Digest = settingsBox.Digest;
+			_settings.SaveDecrypted = settingsBox.SaveDecrypted;
 			_settings.Save();
 		}
 
@@ -2001,8 +1974,8 @@ namespace OutlookPrivacyPlugin
 						fingerprint[fingerprint.Length - 2].ToString("X2") +
 						fingerprint[fingerprint.Length - 1].ToString("X2");
 
-					if (key.ValidDays != 0)
-						k.Expiry = key.CreationTime.AddDays(key.ValidDays).ToShortDateString();
+					if (key.GetValidSeconds() != 0)
+						k.Expiry = key.CreationTime.AddSeconds(key.GetValidSeconds()).ToShortDateString();
 
 					keys.Add(k);
 				}
@@ -2032,24 +2005,21 @@ namespace OutlookPrivacyPlugin
 			return keys;
 		}
 
-		string GetAddressCN(string AddressX400)
+		/// <summary>
+		/// Get the SMTP address for a recipient.
+		/// </summary>
+		/// <remarks>
+		/// Code from:
+		/// https://msdn.microsoft.com/en-us/library/office/ff868695.aspx
+		/// </remarks>
+		/// <param name="recipient"></param>
+		/// <returns></returns>
+		string GetSmtpAddressForRecipient(Outlook.Recipient recipient)
 		{
-			char[] delimiters = { '/' };
-			string[] splitAddress = AddressX400.Split(delimiters);
-			for (int k = 0; k < splitAddress.Length; k++)
-			{
-				if (splitAddress[k].StartsWith("cn=", true, null) && !Regex.IsMatch(splitAddress[k], "ecipient", RegexOptions.IgnoreCase))
-				{
-					string address = Regex.Replace(splitAddress[k], "cn=", string.Empty, RegexOptions.IgnoreCase);
-					if (!string.IsNullOrEmpty(_settings.DefaultDomain))
-					{
-						address += "@" + _settings.DefaultDomain;
-						address = address.Replace("@@", "@");
-					}
-					return address;
-				}
-			}
-			return AddressX400;
+			const string PR_SMTP_ADDRESS = "http://schemas.microsoft.com/mapi/proptag/0x39FE001E";
+
+			Outlook.PropertyAccessor pa = recipient.PropertyAccessor;
+			return pa.GetProperty(PR_SMTP_ADDRESS).ToString();
 		}
 
 		#endregion
