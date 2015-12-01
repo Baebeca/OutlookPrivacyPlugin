@@ -38,11 +38,13 @@
 			this.EncryptCheckBox = new System.Windows.Forms.CheckBox();
 			this.Encrypt2SelfCheckBox = new System.Windows.Forms.CheckBox();
 			this.Default2PlainTextCheckBox = new System.Windows.Forms.CheckBox();
+			this.checkBoxCheckVersion = new System.Windows.Forms.CheckBox();
 			this.ReadTab = new System.Windows.Forms.TabPage();
 			this.ReadTableLayout = new System.Windows.Forms.TableLayoutPanel();
 			this.VerifyCheckBox = new System.Windows.Forms.CheckBox();
 			this.DecryptCheckBox = new System.Windows.Forms.CheckBox();
 			this.IgnoreIntegrityCheckBox = new System.Windows.Forms.CheckBox();
+			this.checkBoxSaveDecrypted = new System.Windows.Forms.CheckBox();
 			this.ExchangeServerTab = new System.Windows.Forms.TabPage();
 			this.ExchangeServerTableLayout = new System.Windows.Forms.TableLayoutPanel();
 			this.DefaultDomainLabel = new System.Windows.Forms.Label();
@@ -57,7 +59,7 @@
 			this.OkButton = new System.Windows.Forms.Button();
 			this.Errors = new System.Windows.Forms.ErrorProvider(this.components);
 			this.GnuPgExeFolderDialog = new System.Windows.Forms.FolderBrowserDialog();
-			this.checkBoxSaveDecrypted = new System.Windows.Forms.CheckBox();
+			this.checkBoxTrace = new System.Windows.Forms.CheckBox();
 			((System.ComponentModel.ISupportInitialize)(this.MainContainer)).BeginInit();
 			this.MainContainer.Panel1.SuspendLayout();
 			this.MainContainer.Panel2.SuspendLayout();
@@ -113,6 +115,8 @@
 			this.ComposeTableLayout.Controls.Add(this.EncryptCheckBox, 1, 1);
 			this.ComposeTableLayout.Controls.Add(this.Encrypt2SelfCheckBox, 1, 2);
 			this.ComposeTableLayout.Controls.Add(this.Default2PlainTextCheckBox, 1, 3);
+			this.ComposeTableLayout.Controls.Add(this.checkBoxCheckVersion, 1, 5);
+			this.ComposeTableLayout.Controls.Add(this.checkBoxTrace, 1, 6);
 			this.ComposeTableLayout.Name = "ComposeTableLayout";
 			// 
 			// SignCheckBox
@@ -138,6 +142,13 @@
 			resources.ApplyResources(this.Default2PlainTextCheckBox, "Default2PlainTextCheckBox");
 			this.Default2PlainTextCheckBox.Name = "Default2PlainTextCheckBox";
 			this.Default2PlainTextCheckBox.UseVisualStyleBackColor = true;
+			// 
+			// checkBoxCheckVersion
+			// 
+			resources.ApplyResources(this.checkBoxCheckVersion, "checkBoxCheckVersion");
+			this.checkBoxCheckVersion.Name = "checkBoxCheckVersion";
+			this.checkBoxCheckVersion.UseVisualStyleBackColor = true;
+			this.checkBoxCheckVersion.CheckedChanged += new System.EventHandler(this.checkBox1_CheckedChanged);
 			// 
 			// ReadTab
 			// 
@@ -172,6 +183,12 @@
 			resources.ApplyResources(this.IgnoreIntegrityCheckBox, "IgnoreIntegrityCheckBox");
 			this.IgnoreIntegrityCheckBox.Name = "IgnoreIntegrityCheckBox";
 			this.IgnoreIntegrityCheckBox.UseVisualStyleBackColor = true;
+			// 
+			// checkBoxSaveDecrypted
+			// 
+			resources.ApplyResources(this.checkBoxSaveDecrypted, "checkBoxSaveDecrypted");
+			this.checkBoxSaveDecrypted.Name = "checkBoxSaveDecrypted";
+			this.checkBoxSaveDecrypted.UseVisualStyleBackColor = true;
 			// 
 			// ExchangeServerTab
 			// 
@@ -275,11 +292,11 @@
 			// 
 			this.GnuPgExeFolderDialog.ShowNewFolderButton = false;
 			// 
-			// checkBoxSaveDecrypted
+			// checkBoxTrace
 			// 
-			resources.ApplyResources(this.checkBoxSaveDecrypted, "checkBoxSaveDecrypted");
-			this.checkBoxSaveDecrypted.Name = "checkBoxSaveDecrypted";
-			this.checkBoxSaveDecrypted.UseVisualStyleBackColor = true;
+			resources.ApplyResources(this.checkBoxTrace, "checkBoxTrace");
+			this.checkBoxTrace.Name = "checkBoxTrace";
+			this.checkBoxTrace.UseVisualStyleBackColor = true;
 			// 
 			// FormSettings
 			// 
@@ -347,5 +364,7 @@
 	public System.Windows.Forms.ComboBox comboBoxCipher;
 	private System.Windows.Forms.Label label3;
 	private System.Windows.Forms.CheckBox checkBoxSaveDecrypted;
+	private System.Windows.Forms.CheckBox checkBoxCheckVersion;
+	private System.Windows.Forms.CheckBox checkBoxTrace;
   }
 }

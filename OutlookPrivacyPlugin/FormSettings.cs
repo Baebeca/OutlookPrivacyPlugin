@@ -29,6 +29,9 @@ namespace OutlookPrivacyPlugin
 			Cipher = settings.Cipher;
 			Digest = settings.Digest;
 
+			CheckVersion = settings.CheckVersion;
+			DebugTrace = settings.DebugTrace;
+
 			// Temporary disable all settings regarding auto-verify/decrypt
 			// MainTabControl.TabPages.RemoveByKey(ReadTab.Name);
 		}
@@ -36,6 +39,16 @@ namespace OutlookPrivacyPlugin
 		private string m_DefaultKey;
 		internal string DefaultKey { get { return m_DefaultKey; } set { m_DefaultKey = value; } }
 
+		internal bool DebugTrace
+		{
+			get { return checkBoxTrace.Checked; }
+			set { checkBoxTrace.Checked = value; }
+		}
+		internal bool CheckVersion
+		{
+			get { return checkBoxCheckVersion.Checked; }
+			set { checkBoxCheckVersion.Checked = value; }
+		}
 		internal bool SaveDecrypted
 		{
 			get { return checkBoxSaveDecrypted.Checked; }
@@ -112,6 +125,11 @@ namespace OutlookPrivacyPlugin
 		}
 
 		private void Settings_Load(object sender, System.EventArgs e)
+		{
+
+		}
+
+		private void checkBox1_CheckedChanged(object sender, System.EventArgs e)
 		{
 
 		}

@@ -32,10 +32,10 @@
     <IsWebBootstrapper>False</IsWebBootstrapper>
     <TargetFrameworkProfile />
     <BootstrapperEnabled>true</BootstrapperEnabled>
-    <PublishUrl>OutlookPrivacyPlugin-BETA-41\</PublishUrl>
+    <PublishUrl>OutlookPrivacyPlugin-BETA-42\</PublishUrl>
     <InstallUrl />
     <TargetCulture>en</TargetCulture>
-    <ApplicationVersion>1.0.0.66</ApplicationVersion>
+    <ApplicationVersion>1.0.0.67</ApplicationVersion>
     <AutoIncrementApplicationRevision>true</AutoIncrementApplicationRevision>
     <UpdateEnabled>false</UpdateEnabled>
     <UpdateInterval>0</UpdateInterval>
@@ -133,9 +133,8 @@
     <Reference Include="Microsoft.Office.Interop.Outlook, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
       <EmbedInteropTypes>True</EmbedInteropTypes>
     </Reference>
-    <Reference Include="NLog, Version=3.2.1.0, Culture=neutral, PublicKeyToken=5120e14c03d0593c, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\NLog.3.2.1\lib\net40\NLog.dll</HintPath>
+    <Reference Include="NLog">
+      <HintPath>..\packages\NLog.4.0.1\lib\net40\NLog.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Data" />
@@ -197,9 +196,8 @@
     <Compile Include="FormKeySelection.Designer.cs">
       <DependentUpon>FormKeySelection.cs</DependentUpon>
     </Compile>
-    <Compile Include="GnuKey.cs" />
-    <Compile Include="GnuPGCommandBar.cs" />
-    <Compile Include="GnuPGRibbon.cs">
+    <Compile Include="KeyItem.cs" />
+    <Compile Include="OppRibbon.cs">
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Language\Localized.Designer.cs">
@@ -242,6 +240,7 @@
     <EmbeddedResource Include="Language\Localized.resx">
       <Generator>PublicResXFileCodeGenerator</Generator>
       <LastGenOutput>Localized.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
@@ -293,16 +292,20 @@
       <Project>{38872a5f-e87e-4fad-b109-8eb7b2e6a4a0}</Project>
       <Name>Org.BouncyCastle</Name>
     </ProjectReference>
+    <ProjectReference Include="..\3rdParty\Newtonsoft.Json-7.0.1\Src\Newtonsoft.Json\Newtonsoft.Json.Net40.csproj">
+      <Project>{a9ae40ff-1a21-414a-9fe7-3be13644cc6d}</Project>
+      <Name>Newtonsoft.Json.Net40</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Deja.Crypto\Deja.Crypto.csproj">
       <Project>{228e6b06-76ac-42ae-8ee6-035da96043ec}</Project>
       <Name>Deja.Crypto</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="GnuPGRibbonCompose.xml" />
-    <EmbeddedResource Include="GnuPGRibbonRead.xml" />
-    <None Include="Resources\attach.bmp" />
+    <EmbeddedResource Include="RibbonCompose.xml" />
+    <EmbeddedResource Include="RibbonRead.xml" />
     <None Include="Resources\attach.gif" />
+    <EmbeddedResource Include="RibbonMain.xml" />
     <Content Include="Resources\database_gear.png" />
     <Content Include="Resources\DejaVu_Logo_Final.png" />
     <Content Include="Resources\GpgLogo.png" />

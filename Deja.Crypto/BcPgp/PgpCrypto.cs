@@ -1,20 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Xml;
 using System.IO;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
 using Org.BouncyCastle.Bcpg.OpenPgp;
 using Org.BouncyCastle.Bcpg.Sig;
 using Org.BouncyCastle.Security;
-using Org.BouncyCastle.Utilities.IO;
-using Org.BouncyCastle.Utilities.Encoders;
 using Org.BouncyCastle.Bcpg;
 
 using NLog;
+using Org.BouncyCastle.Crypto;
 
 namespace Deja.Crypto.BcPgp
 {
@@ -107,6 +104,7 @@ namespace Deja.Crypto.BcPgp
 		/// Checks both key algorithm and also key flags.
 		/// </remarks>
 		/// <param name="key"></param>
+		/// <param name="strict"></param>
 		/// <returns></returns>
 		public bool IsSigningKey(PgpPublicKey key)
 		{
@@ -120,8 +118,11 @@ namespace Deja.Crypto.BcPgp
 
 				if ((keyFlags & KeyFlags.SignData) > 0)
 					return true;
+
+				return false;
 			}
 
+			// Only use alg if keyflags is missing
 			if (IsSigningAlg(key))
 				return true;
 
@@ -152,6 +153,8 @@ namespace Deja.Crypto.BcPgp
 
 				if ((keyFlags & KeyFlags.EncryptStorage) > 0)
 					return true;
+
+				return false;
 			}
 
 			// NOTE: Some keys do not have flags set. Instead use
@@ -294,6 +297,35 @@ namespace Deja.Crypto.BcPgp
 			}
 		}
 
+		public PgpPublicKeyRing GetPublicKeyRing(string email)
+		{
+			using (var inputStream = File.OpenRead(Context.PublicKeyRingFile))
+			using (var decoderStream = PgpUtilities.GetDecoderStream(inputStream))
+			{
+				var pgpPub = new PgpPublicKeyRingBundle(decoderStream);
+				var emailSearch = "<" + email.ToLower().Trim() + ">";
+
+				// Each KeyRing is a single key set (master + subs)
+				foreach (PgpPublicKeyRing kRing in pgpPub.GetKeyRings())
+				{
+					var masterKey = kRing.GetPublicKey();
+					if (!masterKey.IsMasterKey)
+						masterKey = GetMasterPublicKey(masterKey.KeyId);
+
+					if (!IsKeyValid(masterKey))
+						continue;
+
+					// Skip key's that don't match
+					if (!masterKey.GetUserIds().Cast<string>().Any(id => id.ToLower().Contains(emailSearch)))
+						continue;
+
+					return kRing;
+				}
+
+				return null;
+			}
+		}
+
 		/// <summary>
 		/// 
 		/// </summary>
@@ -352,7 +384,7 @@ namespace Deja.Crypto.BcPgp
 
 		public PgpPublicKey GetPublicKey(long keyId)
 		{
-			logger.Debug("GetPublicKey: {0}", keyId);
+			logger.Debug("GetPublicKey: {0:X}", keyId);
 
 			using (var inputStream = File.OpenRead(Context.PublicKeyRingFile))
 			using (var decodeStream = PgpUtilities.GetDecoderStream(inputStream))
@@ -374,7 +406,7 @@ namespace Deja.Crypto.BcPgp
 
 		public PgpPublicKey GetMasterPublicKey(long keyId)
 		{
-			logger.Debug("GetMasterPublicKey: {0}", keyId);
+			logger.Debug("GetMasterPublicKey: {0:X}", keyId);
 
 			using (var inputStream = File.OpenRead(Context.PublicKeyRingFile))
 			using (var decodeStream = PgpUtilities.GetDecoderStream(inputStream))
@@ -547,6 +579,24 @@ namespace Deja.Crypto.BcPgp
 			}
 		}
 
+		public IEnumerable<PgpSecretKey> EnumerateAllEncryptionSecretKeys()
+		{
+			using (var inputStream = File.OpenRead(Context.PrivateKeyRingFile))
+			using (var decoderStream = PgpUtilities.GetDecoderStream(inputStream))
+			{
+				var pgpPub = new PgpSecretKeyRingBundle(decoderStream);
+
+				foreach (PgpSecretKeyRing kRing in pgpPub.GetKeyRings())
+				{
+					foreach (PgpSecretKey k in kRing.GetSecretKeys())
+					{
+						if (IsEncryptionKey(k.PublicKey))
+							yield return k;
+					}
+				}
+			}
+		}
+
 		#endregion
 
 		/// <summary>
@@ -617,8 +667,11 @@ namespace Deja.Crypto.BcPgp
 		/// </summary>
 		/// <param name="data">Data to sign</param>
 		/// <param name="key">Email address of key</param>
+		/// <param name="headers">Headers to add to signed message</param>
+		/// <param name="wrapLines">Automatically wrap lines that are too long</param>
+		/// <param name="encoding">s</param>
 		/// <returns>Returns ascii armored signature</returns>
-		public string SignClear(string data, string key, Encoding encoding, Dictionary<string, string> headers)
+		public string SignClear(string data, string key, Encoding encoding, Dictionary<string, string> headers, bool wrapLines = true)
 		{
 			Context = new CryptoContext(Context);
 
@@ -642,7 +695,33 @@ namespace Deja.Crypto.BcPgp
 				break;
 			}
 
-			// //
+			// Split any long lines if we are asked to do so.
+
+			var mailLines = data.Split('\n');
+
+			if (wrapLines && mailLines.Any(line => line.Length > 70))
+			{
+				var lines = new List<string>(mailLines);
+				for (var i = 0; i < lines.Count; i++)
+				{
+					var line = lines[i];
+					if (line.Length <= 70) continue;
+					
+					var newLine = line.Substring(70);
+					line = line.Substring(0, 70);
+
+					lines[i] = line;
+					lines.Insert(i + 1, newLine);
+				}
+
+				var sb = new StringBuilder(data.Length + 20);
+				foreach (var line in lines)
+					sb.AppendLine(line.TrimEnd('\r', '\n'));
+
+				data = sb.ToString();
+			}
+
+			// Now lets do our signing stuff
 
 			using (var sout = new MemoryStream())
 			{
@@ -667,7 +746,7 @@ namespace Deja.Crypto.BcPgp
 
 							// Lines must have all white space removed
 							line = line.TrimEnd(null);
-							line = line.TrimEnd(new char[] { ' ', '\t', '\r', '\n' });
+							line = line.TrimEnd(' ', '\t', '\r', '\n');
 
 							line += "\r\n";
 
@@ -682,10 +761,7 @@ namespace Deja.Crypto.BcPgp
 					armoredOut.EndClearText();
 
 					using (var outputStream = new BcpgOutputStream(armoredOut))
-					{
-
 						signatureData.Generate().Encode(outputStream);
-					}
 				}
 
 				return encoding.GetString(sout.ToArray());
@@ -695,14 +771,13 @@ namespace Deja.Crypto.BcPgp
 		public string PublicKey(string email, Dictionary<string, string> headers)
 		{
 			Context = new CryptoContext(Context);
-
-			var publicKey = GetPublicKeyForEncryption(email);
+			var publicKeyRing = GetPublicKeyRing(email);
 
 			using (var sout = new MemoryStream())
 			{
 				using (var armoredOut = new ArmoredOutputStream(sout))
 				{
-					publicKey.Encode(armoredOut);
+					publicKeyRing.Encode(armoredOut);
 				}
 
 				return ASCIIEncoding.ASCII.GetString(sout.ToArray());
@@ -923,7 +998,7 @@ namespace Deja.Crypto.BcPgp
 			Context = new CryptoContext(Context);
 
 			var crlf = new byte[] { (byte)'\r', (byte)'\n' };
-			var encoding = ASCIIEncoding.UTF8;
+			var encoding = Encoding.UTF8;
 
 			using (var dataIn = new MemoryStream(data))
 			using (var armoredIn = new ArmoredInputStream(dataIn))
@@ -986,7 +1061,7 @@ namespace Deja.Crypto.BcPgp
 
 					Context.IsEncrypted = false;
 					Context.IsSigned = true;
-					Context.SignedBy = GetPublicKey(signature.KeyId);
+					Context.SignedBy = GetMasterPublicKey(signature.KeyId);
 
 					if (Context.SignedBy == null)
 						throw new PublicKeyNotFoundException("Public key not found for key id \"" + signature.KeyId + "\".");
@@ -1088,91 +1163,7 @@ namespace Deja.Crypto.BcPgp
 
 			if (obj is PgpEncryptedDataList)
 			{
-				logger.Trace("DecryptHandlePgpObject: IsEncrypted");
-				Context.IsEncrypted = true;
-				var dataList = obj as PgpEncryptedDataList;
-
-				// Set once we have matched a keyid.
-				bool secretKeyMatched = false;
-
-				foreach (PgpPublicKeyEncryptedData encryptedData in dataList.GetEncryptedDataObjects())
-				{
-					try
-					{
-						// If we have already found a key to use, skip others. It is possible
-						// to have all the keys in our ring.
-						if (Context.SecretKey != null)
-							continue;
-
-						// NOTE: When content is encrypted to multiple recipients, only one of these blocks
-						//       will match a known KeyId.  If a match is never made, then there is a problem :)
-
-						var masterSecretKey = GetMasterSecretKey(encryptedData.KeyId);
-						var secretKey = GetSecretKey(encryptedData.KeyId);
-
-						if (masterSecretKey == null || secretKey == null)
-							continue;
-
-						var passphrase = Context.PasswordCallback(masterSecretKey, secretKey);
-
-						// Incorrect passphrase or cancel
-						if (passphrase == null)
-							continue;
-
-						Context.SecretKey = masterSecretKey;
-
-						logger.Trace("DecryptHandlePgpObject: Found key: " + encryptedData.KeyId);
-						secretKeyMatched = true;
-
-						using (var cleartextIn = encryptedData.GetDataStream(
-							secretKey.ExtractPrivateKey(passphrase)))
-						{
-							var clearFactory = new PgpObjectFactory(cleartextIn);
-							var nextObj = clearFactory.NextPgpObject();
-							if (nextObj == null)
-								return null;
-
-							var r = DecryptHandlePgpObject(nextObj);
-							if (r != null)
-								ret = r;
-						}
-
-						// This can fail due to integrity protection missing.
-						// Legacy systems to not have this protection
-						// Should make an option to ignore.
-						try
-						{
-							if (!encryptedData.Verify())
-							{
-								logger.Debug("DecryptHandlePgpObject: encryptedData.Verify failed");
-								throw new VerifyException("Verify of encrypted data failed!");
-							}
-						}
-						catch (PgpException exx)
-						{
-							logger.Debug("DecryptHandlePgpObject: " + exx.Message);
-
-							// Legacy systems do not have this protection
-							// Exposed as a flag to allow library consumer to 
-							// decide on correct coarse of action
-							if (exx.Message == "data not integrity protected.")
-								Context.FailedIntegrityCheck = true;
-							else
-								throw;
-						}
-					}
-					catch (PgpException ex)
-					{
-						if (!(ex.InnerException is EndOfStreamException))
-							throw ex;
-					}
-				}
-
-				if (!secretKeyMatched)
-				{
-					logger.Debug("DecryptHandlePgpObject: Decryption key not found");
-					throw new SecretKeyNotFoundException("Error, unable to locate decryption key.");
-				}
+				ret = HandlePgpEncryptedDataList(obj);
 			}
 			else if (obj is PgpCompressedData)
 			{
@@ -1314,6 +1305,182 @@ namespace Deja.Crypto.BcPgp
 				(ret == null ? "null" : ret.Length.ToString()) + " bytes");
 
 			return ret;
+		}
+
+		private byte[] HandlePgpEncryptedDataList(PgpObject obj)
+		{
+			logger.Trace("DecryptHandlePgpObject: IsEncrypted");
+			Context.IsEncrypted = true;
+			var dataList = (PgpEncryptedDataList) obj;
+
+			byte[] ret = null;
+
+			PgpPublicKeyEncryptedData encryptedData = null;
+			PgpSecretKey masterSecretKey = null;
+			PgpSecretKey secretKey = null;
+			char[] passphrase = null;
+
+			var hiddenRecipientData =
+				dataList.GetEncryptedDataObjects().Cast<PgpPublicKeyEncryptedData>().FirstOrDefault(key => key.KeyId == 0);
+			var knownKeyData =
+				dataList.GetEncryptedDataObjects().Cast<PgpPublicKeyEncryptedData>().FirstOrDefault(key => GetSecretKey(key.KeyId) != null);
+
+			if (hiddenRecipientData == null && knownKeyData == null)
+			{
+				logger.Debug("DecryptHandlePgpObject: Decryption key not found");
+				throw new SecretKeyNotFoundException("Error, unable to locate decryption key.");
+			}
+
+			if (knownKeyData != null)
+			{
+				masterSecretKey = GetMasterSecretKey(knownKeyData.KeyId);
+				secretKey = GetSecretKey(knownKeyData.KeyId);
+
+				if (masterSecretKey == null || secretKey == null)
+					return null;
+
+				passphrase = Context.PasswordCallback(masterSecretKey, secretKey);
+
+				// Incorrect passphrase or cancel
+				if (passphrase == null)
+					return null;
+
+				encryptedData = knownKeyData;
+
+				try
+				{
+					Context.SecretKey = masterSecretKey;
+
+					logger.Trace("DecryptHandlePgpObject: Found key: {0:X}", secretKey.KeyId);
+
+					using (var cleartextIn = encryptedData.GetDataStream(
+						secretKey.ExtractPrivateKey(passphrase)))
+					{
+						var clearFactory = new PgpObjectFactory(cleartextIn);
+
+						while (ret == null)
+						{
+							var nextObj = clearFactory.NextPgpObject();
+							if (nextObj == null)
+								return null;
+
+							var r = DecryptHandlePgpObject(nextObj);
+							if (r != null)
+								ret = r;
+						}
+					}
+
+					// This can fail due to integrity protection missing.
+					// Legacy systems to not have this protection
+					// Should make an option to ignore.
+					try
+					{
+						if (!encryptedData.Verify())
+						{
+							logger.Debug("DecryptHandlePgpObject: encryptedData.Verify failed");
+							throw new VerifyException("Verify of encrypted data failed!");
+						}
+					}
+					catch (PgpException exx)
+					{
+						logger.Debug("DecryptHandlePgpObject: " + exx.Message);
+
+						// Legacy systems do not have this protection
+						// Exposed as a flag to allow library consumer to 
+						// decide on correct coarse of action
+						if (exx.Message == "data not integrity protected.")
+							Context.FailedIntegrityCheck = true;
+						else
+							throw;
+					}
+				}
+				catch (PgpException ex)
+				{
+					if (!(ex.InnerException is EndOfStreamException))
+						throw;
+				}
+
+				return ret;
+			}
+
+			// hidden recipient path
+
+			encryptedData = hiddenRecipientData;
+			var foundKey = false;
+
+			// Try all secret keys until we find a match
+			foreach (var key in EnumerateAllEncryptionSecretKeys())
+			{
+				masterSecretKey = GetMasterSecretKey(key.KeyId);
+				secretKey = key;
+
+				passphrase = Context.PasswordCallback(masterSecretKey, secretKey);
+
+				// Incorrect passphrase or cancel
+				if (passphrase == null)
+					continue;
+
+				try
+				{
+					using (var cleartextIn = encryptedData.GetDataStream(secretKey.ExtractPrivateKey(passphrase)))
+					{
+						var clearFactory = new PgpObjectFactory(cleartextIn);
+
+						while (ret == null)
+						{
+							var nextObj = clearFactory.NextPgpObject();
+
+							logger.Trace("DecryptHandlePgpObject: Found key: {0:X}", secretKey.KeyId);
+							foundKey = true;
+
+							if (nextObj == null)
+								return null;
+
+							var r = DecryptHandlePgpObject(nextObj);
+							if (r != null)
+								ret = r;
+						}
+					}
+
+					// This can fail due to integrity protection missing.
+					// Legacy systems to not have this protection
+					// Should make an option to ignore.
+					try
+					{
+						if (!encryptedData.Verify())
+						{
+							logger.Debug("DecryptHandlePgpObject: encryptedData.Verify failed");
+							throw new VerifyException("Verify of encrypted data failed!");
+						}
+					}
+					catch (PgpException exx)
+					{
+						logger.Debug("DecryptHandlePgpObject: " + exx.Message);
+
+						// Legacy systems do not have this protection
+						// Exposed as a flag to allow library consumer to 
+						// decide on correct coarse of action
+						if (exx.Message == "data not integrity protected.")
+							Context.FailedIntegrityCheck = true;
+						else
+							throw;
+					}
+
+					return ret;
+				}
+				catch (DataLengthException)
+				{
+					// ignore, key didn't match out data length
+				}
+				catch (PgpException ex)
+				{
+					if (foundKey && !(ex.InnerException is EndOfStreamException))
+						throw;
+				}
+			}
+
+			logger.Debug("DecryptHandlePgpObject: Decryption key not found");
+			throw new SecretKeyNotFoundException("Error, unable to locate decryption key.");
 		}
 	}
 }

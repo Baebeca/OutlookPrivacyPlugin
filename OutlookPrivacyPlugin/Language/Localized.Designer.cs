@@ -61,11 +61,29 @@ namespace OutlookPrivacyPlugin.Language {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Outlook Privacy Plugin.
+        /// </summary>
+        public static string DialogTitle {
+            get {
+                return ResourceManager.GetString("DialogTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Incorrect passphrase possibly entered..
         /// </summary>
         public static string ErrorBadPassphrase {
             get {
                 return ResourceManager.GetString("ErrorBadPassphrase", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Outlook Privacy Plugin Error.
+        /// </summary>
+        public static string ErrorDialogTitle {
+            get {
+                return ResourceManager.GetString("ErrorDialogTitle", resourceCulture);
             }
         }
         
@@ -151,7 +169,7 @@ namespace OutlookPrivacyPlugin.Language {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Unable to verify signature, missing public key..
+        ///   Looks up a localized string similar to Unable to verify signature, missing public KeyItem..
         /// </summary>
         public static string MsgSigMissingPubKey {
             get {
@@ -174,6 +192,15 @@ namespace OutlookPrivacyPlugin.Language {
         public static string MsgValidSig {
             get {
                 return ResourceManager.GetString("MsgValidSig", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to A new version of Outlook Privacy Plugin is available..
+        /// </summary>
+        public static string NewVersionAvailable {
+            get {
+                return ResourceManager.GetString("NewVersionAvailable", resourceCulture);
             }
         }
     }
